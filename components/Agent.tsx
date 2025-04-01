@@ -1,22 +1,90 @@
+'use client'
+
 import { cn } from '@/lib/utils';
 import Image from 'next/image'
-import React from 'react'
-
+import { useRouter } from 'next/router';
+import React, { useEffect, useState } from 'react'
+import { vapi } from '@/lib/vapi.sdk'
 enum CallStatus {
     INACTIVE = 'INACTIVE',
     CONNECTING = 'CONNECTING',
     ACTIVE = 'ACTIVE',
     FINISHED = 'FINISHED',
 };
-const Agent = ({ userName }: AgentProps) => {
-    const callStatus = CallStatus.FINISHED
-    const isSpeaking = true;
+
+interface SavedMessage {
+    role: 'user' | 'system' |  'assistant'; // who's saying the message
+    content: string; /// content of the message
+}
+const Agent = ({ userName, userId, type }: AgentProps) => {
+    const router = useRouter(); 
+    // handling the different of states of the calls 
+    const [isSpeaking, setIsSpeaking] = useState(false); 
+    const [callStatus, setCallStatus] = useState<CallStatus>(CallStatus.INACTIVE); 
+    const [messages, setMessages] = useState<SavedMessage[]>([])
+
+
+    // we only want to attach these event listeners once, not every time the component re-renders.
+    useEffect(() => {
+        // we'll only call the useEffect at the start 
+        const onCallStart = () => setCallStatus(CallStatus.ACTIVE)
+        // after call finished 
+        const onCallEnd = () => setCallStatus(CallStatus.FINISHED); 
+
+        const onMessage = (message: Message) => {
+            if (message.type === 'transcript' && message.transcriptType === 'final') {
+                const newMessage = { role: message.role, content: message.transcript }
+                // adds the new message to the list of all the previous messages 
+                setMessages((prev) => [...prev, newMessage]); 
+            }
+        }
+
+        const onSpeechStart = () => setIsSpeaking(true); 
+        const onSpeechEnd = () => setIsSpeaking(false); 
+
+        const onError = (error: Error) => console.log('Error', error); 
+
+        vapi.on('call-start', onCallStart); 
+        vapi.on('call-end', onCallEnd);
+        vapi.on('message', onMessage); 
+        vapi.on('speech-start', onSpeechStart); 
+        vapi.on('speech-end', onSpeechEnd); 
+        vapi.on('error', onError); 
+
+        return () => {
+            vapi.off('call-start', onCallStart); 
+            vapi.off('call-end', onCallEnd);
+            vapi.off('message', onMessage); 
+            vapi.off('speech-start', onSpeechStart); 
+            vapi.off('speech-end', onSpeechEnd); 
+            vapi.off('error', onError); 
+        }
+    }, [])
+
+    const handleCall = async () => {
+        setCallStatus(CallStatus.CONNECTING); 
+        await vapi.start(process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID!, {
+            variableValues: {
+                userName: userName, 
+                userid: userId 
+            }
+        })
+    }
+
+    const handleDisconnect = async () => {
+        setCallStatus(CallStatus.FINISHED); 
+        vapi.stop(); 
+    }
+    // executed whenever anything changes
+    useEffect(() => {
+        if(callStatus === CallStatus.FINISHED) router.push('/'); 
+        // we're pushing the user to the home page and not to the Interview they've generated directly cause it could take some time to generate the Interview... 
+        
+    }, [messages, callStatus, type, userId])
     // to see the transcript of the conversation while speaking
-    const messages = [
-        'Whats Your Name', 
-        'My name is John Doe, Nice to meet you!'
-    ]; 
-    const lastMessage = messages[messages.length - 1];
+    const latestMessage = messages[messages.length - 1]?.content;
+    const isCallInactiveOrFinished = callStatus === CallStatus.INACTIVE || callStatus === CallStatus.FINISHED
+
 
 
 
@@ -57,8 +125,8 @@ const Agent = ({ userName }: AgentProps) => {
             {messages.length > 0 && (
                 <div className='transcript-border'>
                     <div className='transcript'>
-                        <p key={lastMessage} className={cn('transition-opacity duration-500 opacity-0', 'animate-fadeIn opacity-100')}>
-                            {lastMessage}
+                        <p key={latestMessage} className={cn('transition-opacity duration-500 opacity-0', 'animate-fadeIn opacity-100')}>
+                            {latestMessage}
                         </p>
                     </div>
                 </div>
@@ -66,16 +134,16 @@ const Agent = ({ userName }: AgentProps) => {
 
             <div className='w-full flex justify-center'>
                 {callStatus !== 'ACTIVE' ? (
-                    <button className='relative btn-call'>
-                        <span className={cn('absolute animate-ping rounded-full opacity-75', callStatus !== 'CONNECTED' & 'hidden')}
+                    <button className='relative btn-call' onClick={handleCall}>
+                        <span className={cn('absolute animate-ping rounded-full opacity-75', callStatus !== 'CONNECTING' && 'hidden')} 
                         />
 
                         <span>
-                            {callStatus === 'INACTIVE' || callStatus === 'FINISHED' ? 'Call' : ". . . "}
+                            { isCallInactiveOrFinished ? 'Call' : ". . ."}
                         </span>
                     </button>
                 ) : (
-                    <button className='btn-disconnect'>End</button>
+                    <button className='btn-disconnect' onClick={handleDisconnect}>End</button>
                 )}
             </div>
         </>
