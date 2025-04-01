@@ -5,12 +5,12 @@ import Image from 'next/image';
 import { Button } from './ui/button';
 import Link from 'next/link';
 import DisplayTechicons from './DisplayTechicons';
-const InterviewCard = ({interviewId, userId, role, type, techstack, createdAt}: InterviewCardProps) => {
+const InterviewCard = ({interviewId, userId, role, type, techstack, craetedAt}: InterviewCardProps) => {
     const feedback = null as Feedback | null
     // technical
     // mix of technical and behavioral
     const normalizedType = /mix/gi.test(type) ? 'Mixed' : type; 
-    const formattedDate = dayjs(feedback?.createdAt || createdAt || Date.now()).format('MMM D, YYYY'); 
+    const formattedDate = dayjs(feedback?.craetedAt || craetedAt || Date.now()).format('MMM D, YYYY'); 
 
   return (
     <div className='card-border w-[360px] max-sm:w-full min-h-96'>
